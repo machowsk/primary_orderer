@@ -1,50 +1,32 @@
 import csv
+import enum
 
 DEFAULT_CSV_FILENAME = 'election2016.csv'
 
 
 class State:
 
-    totalEC = 0
-
-    # "Enumerations" to indicate which scoring methodology to use.
-    DELTA_ONLY = 1
-    DELTA_AND_EC = 2
-    
-
-    methodology = DELTA_ONLY
-
-    def __init__(self, name, dem, rep, ec):
+    def __init__(self, nation, name, dem, rep, ec):
         self.name = name
         self.dem = int(dem)
         self.rep = int(rep)
         self.delta = float(abs(self.dem - self.rep)) / float(self.dem + self.rep)
         self.ec = int(ec)
-
-
-    @staticmethod
-    def parseCSV(filename=DEFAULT_CSV_FILENAME):
-
-        states = []
-        State.totalEC = 0
-        with open(filename, 'r') as fh:
-            reader = csv.DictReader(fh)
-            for row in reader:
-                states.append(State(name=row['State'], dem=row['Dem'], rep=row['Rep'], ec=row['EC']))
-                State.totalEC += int(row['EC'])
-
-        return states
+        self.nation = nation
 
     def computeScore(self):
 
         score_scalar = 10.0
         delta_strength = 1.0 - self.delta
 
-        if State.DELTA_ONLY == State.methodology:
+        if Methodology.DELTA_ONLY == self.nation.methodology:
             return score_scalar * delta_strength
 
-        elif State.DELTA_AND_EC == State.methodology:
-            ec_strength = float(self.ec) / float(State.totalEC) if self.ec > 0 else 0.0
+        elif Methodology.DELTA_AND_EC == self.nation.methodology:
+            ec_strength = float(self.ec) / float(self.nation.totalElectoralCollegeSize) if self.ec > 0 else 0.0
+
+            # Is simply adding these two values the right thing to do? We could scale them to give more or less weight
+            # to the state's size in the electoral college...
             return score_scalar * (ec_strength + delta_strength)
 
         return 0.0
@@ -52,24 +34,47 @@ class State:
     def __str__(self):
         fullname = "{name} ({ec})".format(name=self.name, ec=self.ec)
         delta_percent = "{delta:.2f}%".format(delta=self.delta * 100.0)
-        return "{fullname:<20} {score:>8.2f} {delta:>8}".format(fullname=fullname, delta=delta_percent, score=self.computeScore())
+        return "{fullname:<20} {score:>8.2f} {delta:>8}".format(fullname=fullname, delta=delta_percent,
+                                                                score=self.computeScore())
+
+
+class Methodology(enum.Enum):
+    DELTA_ONLY = 1  # Only consider how close the last race was when scoring a state for the next cycle
+    DELTA_AND_EC = 2  # Consider how close the last race was AND the size of the state in the Electoral College
+
+
+class Nation:
+    
+    def __init__(self):
+        
+        self.totalElectoralCollegeSize = 0
+        self.states = []
+
+    def parseCSV(self, filename=DEFAULT_CSV_FILENAME):
+        self.states = []
+        self.totalElectoralCollegeSize = 0
+        with open(filename, 'r') as fh:
+            reader = csv.DictReader(fh)
+            for row in reader:
+                self.states.append(State(nation=self, name=row['State'], dem=row['Dem'], rep=row['Rep'], ec=row['EC']))
+                self.totalElectoralCollegeSize += int(row['EC'])
 
     @staticmethod
     def printHeader():
         print("{name:<20} {score:>8} {delta:>8}".format(name="NAME (EC)", score="SCORE", delta="DELTA"))
         print("_" * 38)
 
+    def processElection(self, filename=DEFAULT_CSV_FILENAME, methodology = Methodology.DELTA_ONLY):
 
-def processElection(filename=DEFAULT_CSV_FILENAME, methodology=State.DELTA_ONLY):
+        self.methodology = methodology
 
-    State.methodology = methodology
-    states = State.parseCSV(filename=filename)
+        self.parseCSV(filename=filename)
 
-    sortedstates = sorted(states, key=lambda s: s.computeScore(), reverse=True)
+        sortedstates = sorted(self.states, key=lambda s: s.computeScore(), reverse=True)
 
-    State.printHeader()
-    for state in sortedstates:
-        print(state)
+        Nation.printHeader()
+        for state in sortedstates:
+            print(state)
 
 
 if '__main__' == __name__:
@@ -80,9 +85,9 @@ if '__main__' == __name__:
     parser.add_argument('--csv', action='store', default=DEFAULT_CSV_FILENAME)
 
     args = parser.parse_args()
-    method = State.DELTA_ONLY
+    method = Methodology.DELTA_ONLY
     if args.method == 'delta_ec':
-        method = State.DELTA_AND_EC
+        method = Methodology.DELTA_AND_EC
 
     import os
     import sys
@@ -92,4 +97,4 @@ if '__main__' == __name__:
         print("{fn} doesn't seem to be a file. Exiting'".format(fn=filename))
         sys.exit(-1)
 
-    processElection(filename=filename, methodology=method)
+    Nation().processElection(filename=filename, methodology=method)
