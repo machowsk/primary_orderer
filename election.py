@@ -1,5 +1,5 @@
 import csv
-import enum
+from enum import IntEnum, unique
 
 DEFAULT_CSV_FILENAME = 'election2016.csv'
 
@@ -38,8 +38,9 @@ class State:
                                                                 score=self.computeScore())
 
 
-class Methodology(enum.Enum):
-    DELTA_ONLY = 1  # Only consider how close the last race was when scoring a state for the next cycle
+@unique
+class Methodology(IntEnum):
+    DELTA_ONLY = 1    # Only consider how close the last race was when scoring a state for the next cycle
     DELTA_AND_EC = 2  # Consider how close the last race was AND the size of the state in the Electoral College
 
 
@@ -61,15 +62,14 @@ class Nation:
 
     @staticmethod
     def printHeader():
-        print("{name:<20} {score:>8} {delta:>8}".format(name="NAME (EC)", score="SCORE", delta="DELTA"))
-        print("_" * 38)
+        headerText = "{name:<20} {score:>8} {delta:>8}".format(name="NAME (EC)", score="SCORE", delta="DELTA")
+        print(headerText)
+        print("_" * len(headerText))
 
     def processElection(self, filename=DEFAULT_CSV_FILENAME, methodology = Methodology.DELTA_ONLY):
 
         self.methodology = methodology
-
         self.parseCSV(filename=filename)
-
         sortedstates = sorted(self.states, key=lambda s: s.computeScore(), reverse=True)
 
         Nation.printHeader()
